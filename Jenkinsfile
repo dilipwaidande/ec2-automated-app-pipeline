@@ -9,7 +9,7 @@ pipeline {
     stages {
         stage('Code Checkout') {
             steps {
-                git branch: 'main', url: ''
+                git branch: 'main', url: 'https://github.com/dilipwaidande/ec2-automated-app-pipeline.git'
             }
         }
 
