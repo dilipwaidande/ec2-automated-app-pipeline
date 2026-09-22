@@ -26,7 +26,7 @@ pipeline {
             steps {
                 script {
                     echo "Pushing Image to Docker Hub..."
-                    withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
                         sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin"
                         sh "docker push ${DOCKER_HUB_REPO}:${BUILD_NUMBER}"
                         sh "docker push ${DOCKER_HUB_REPO}:latest"
