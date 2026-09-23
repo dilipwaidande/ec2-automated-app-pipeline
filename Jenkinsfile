@@ -29,10 +29,11 @@ pipeline {
             steps {
                 script {
                     pushDocker(env.DOCKER_HUB_REPO, env.BUILD_NUMBER, 'docker-hub-creds')
-                    }
                 }
             }
         }
+
+            
 
         stage('Container Deploy') {
             steps {
@@ -41,7 +42,6 @@ pipeline {
                 }
             }
         }
-    }
 
     post {
         always {
@@ -54,4 +54,5 @@ pipeline {
             echo "Pipeline Failed!"
         }
     }
+  }
 }
