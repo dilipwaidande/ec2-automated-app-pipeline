@@ -1,6 +1,9 @@
+@Library('my-shared-library@main')
 pipeline {
-    agent any
-
+    agent {
+        label 'ec2-agent'
+    }
+    
     environment {
         DOCKER_HUB_REPO = 'dilipwdocker/project1-nginx'
         APP_NAME        = 'my-running-nginx-app'
@@ -16,8 +19,7 @@ pipeline {
         stage('Docker Build') {
             steps {
                 script {
-                    echo "Building Docker Image..."
-                    sh "docker build -t ${DOCKER_HUB_REPO}:${BUILD_NUMBER} -t ${DOCKER_HUB_REPO}:latest ."
+                    buildDocker(env.DOCKER_HUB_REPO, env.BUILD_NUMBER)
                 }
             }
         }
@@ -25,11 +27,7 @@ pipeline {
         stage('Docker Push') {
             steps {
                 script {
-                    echo "Pushing Image to Docker Hub..."
-                    withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
-                        sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin"
-                        sh "docker push ${DOCKER_HUB_REPO}:${BUILD_NUMBER}"
-                        sh "docker push ${DOCKER_HUB_REPO}:latest"
+                    pushDocker(env.DOCKER_HUB_REPO, env.BUILD_NUMBER, 'docker-hub-creds')
                     }
                 }
             }
@@ -38,10 +36,7 @@ pipeline {
         stage('Container Deploy') {
             steps {
                 script {
-                    echo "Deploying Container on EC2..."
-                    sh "docker stop ${APP_NAME} || true"
-                    sh "docker rm ${APP_NAME} || true"
-                    sh "docker run -d --name ${APP_NAME} -p 8000:80 ${DOCKER_HUB_REPO}:latest"
+                    deployApp(env.APP_NAME, env.DOCKER_HUB_REPO, '8000', '80')
                 }
             }
         }
