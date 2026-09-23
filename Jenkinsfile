@@ -32,7 +32,7 @@ pipeline {
                 }
             }
         }
-
+    }
             
 
         stage('Container Deploy') {
@@ -54,5 +54,4 @@ pipeline {
             echo "Pipeline Failed!"
         }
     }
-  }
 }
