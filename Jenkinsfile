@@ -18,7 +18,7 @@ pipeline {
 
         stage('Trivy FileSystem Scan') {
             steps {
-                sh "trivy fs --format table -o trivy"
+                sh "trivy fs ."
             }
         }
         
