@@ -1,13 +1,12 @@
 @Library('my-shared-library@main') _
 
 pipeline {
-    agent {
-        label 'ec2-agent'
-    }
-    
+    agent any
+
     environment {
         DOCKER_HUB_REPO = 'dilipwdocker/project1-nginx'
-        APP_NAME        = 'my-running-nginx-app'
+        APP_NAME        = 'my-running-nginx-p4'
+        SCANNER_HOME    = tool 'sonar-scanner'
     }
 
     stages {
@@ -17,11 +16,39 @@ pipeline {
             }
         }
 
+        stage('Trivy FileSystem Scan') {
+            steps {
+                sh "trivy fs --format table -o trivy
+            }
+        }
+        
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonar-server') {
+                    sh "${SCANNER_HOME}/bin/sonar-scanner -Dsonar.projectName=ec2-nginx-app -Dsonar.projectKey=ec2-nginx-app"
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                script {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+        
         stage('Docker Build') {
             steps {
                 script {
                     buildDocker(env.DOCKER_HUB_REPO, env.BUILD_NUMBER)
                 }
+            }
+        }
+
+        stage('Trivy Image Scan') {
+            steps {
+                sh "trivy image --severity HIGH,CRITICAL ${env.DOCKER_HUB_REPO}:${env.BUILD_NUMBER}"
             }
         }
 
@@ -47,10 +74,10 @@ pipeline {
             sh "docker logout || true"
         }
         success {
-            echo "Pipeline Executed Successfully!"
+            echo "DevSecOps Pipeline Executed Successfully!"
         }
         failure {
-            echo "Pipeline Failed!"
+            echo "DevSecOps Pipeline Failed!"
         }
     }
 }
