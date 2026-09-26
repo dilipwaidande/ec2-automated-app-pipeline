@@ -5,7 +5,7 @@ pipeline {
 
     environment {
         DOCKER_HUB_REPO = 'dilipwdocker/project1-nginx'
-        APP_NAME        = 'my-running-nginx-p4'
+        APP_NAME        = 'my-running-nginx-p4-devsecops'
         SCANNER_HOME    = tool 'sonar-scanner'
     }
 
