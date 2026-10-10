@@ -10,27 +10,6 @@ This repository contains the application and pipeline definition for **Enterpris
 
 ---
 
-## 🏗️ Enterprise Architecture
-
-```text
-                                  +-------------------------------------------------------+
-                                  |                 AWS EC2 MASTER NODE                   |
-                                  |  - Jenkins Controller (Java 21)                       |
-                                  |  - Global Credentials Manager                         |
-                                  +---------------------------+---------------------------+
-                                                              |
-                                                              | SSH Remoting (agent-ssh-key)
-                                                              v
-+------------------------------------------------------------------------------------------------------------------+
-|                                        AWS EC2 WORKER AGENT NODE (`build-agent`)                                 |
-|                                        (Ubuntu 24.04 LTS | OpenJDK 21 | Docker | Trivy)                            |
-|                                                                                                                  |
-|  [1. Checkout] ──► [2. OWASP SCA Scan] ──► [3. Trivy FS Scan] ──► [4. SonarQube SAST] ──► [5. Docker Build/Push] ──► [6. Trivy Image Scan] |
-|                                                    (Hard Stop)        (Quality Gate)       (withCredentials)      (Runtime Scan) |
-+------------------------------------------------------------------------------------------------------------------+
-                                                                                                      |
-                                                                                                      v
-                                                                                             [ Docker Hub Registry ]
 🔥 Key Security & Architectural Features
 Distributed Master-Agent Architecture: Offloads all heavy build, compilation, and security analysis tasks from the Jenkins Controller to a dedicated SSH worker agent (build-agent), preventing Controller memory exhaustion and operational failure.
 Jenkins Shared Library Modularization: Standardizes pipeline logic across enterprise applications using reusable Groovy scripts stored in an external repository (jenkins-shared-library@release/v1.1.0).
