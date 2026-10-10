@@ -1,65 +1,84 @@
-# AWS EC2 Automated DevSecOps CI/CD Pipeline
+# Enterprise DevSecOps CI Pipeline with Jenkins Shared Library
 
-A Jenkins-based CI/CD pipeline that automates the flow from GitHub source code to a Docker container running on AWS EC2, with security and code-quality checks integrated into the pipeline.
+[![Jenkins](https://img.shields.io/badge/Jenkins-2.401+-d33833?style=flat&logo=jenkins&logoColor=white)](https://www.jenkins.io/)
+[![AWS EC2](https://img.shields.io/badge/AWS-EC2-FF9900?style=flat&logo=amazon-aws&logoColor=white)](https://aws.amazon.com/ec2/)
+[![Docker](https://img.shields.io/badge/Docker-29.1.3-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.io/)
+[![Trivy](https://img.shields.io/badge/Trivy-Vulnerability_Scanner-13a89e?style=flat&logo=aqua&logoColor=white)](https://github.com/aquasecurity/trivy)
+[![SonarQube](https://img.shields.io/badge/SonarQube-Quality_Gate-4E9BCD?style=flat&logo=sonarqube&logoColor=white)](https://www.sonarqube.org/)
 
-## Architecture
+This repository contains the application and pipeline definition for **Enterprise DevSecOps CI Pipeline**. It demonstrates a production-grade, distributed Continuous Integration pipeline running on AWS EC2 instances, leveraging **Jenkins Shared Libraries**, a **Master-Agent (Distributed) Architecture over SSH**, and multi-layered automated security gates.
 
-GitHub → Webhook → Jenkins → Trivy → SonarQube → Quality Gate → Docker Build → Trivy Image Scan → Docker Hub → AWS EC2 Container
+---
 
-## Pipeline Flow
-
-1. **GitHub Checkout**
-   - Source code is pulled from the `main` branch.
-   - GitHub Webhook triggers the Jenkins pipeline automatically.
-
-2. **Trivy Filesystem Scan**
-   - Scans the source directory for known vulnerabilities.
-
-3. **SonarQube Analysis**
-   - Performs static code analysis and code-quality checks.
-
-4. **Quality Gate**
-   - Pipeline waits for the SonarQube quality gate.
-   - Pipeline is aborted if the quality gate fails.
-
-5. **Docker Build**
-   - Docker image is built using the Jenkins Shared Library.
-   - Build number is used for image versioning.
-
-6. **Trivy Image Scan**
-   - Docker image is scanned for `HIGH` and `CRITICAL` vulnerabilities.
-
-7. **Docker Hub Push**
-   - Image is pushed to Docker Hub using Jenkins-managed credentials/token authentication.
-
-8. **Container Deployment**
-   - The Docker container is deployed on an AWS EC2 host.
-   - Application port mapping: `8000 → 80`.
-
-## Jenkins / DevOps Concepts Implemented
-
-- GitHub Webhooks for automated pipeline triggering
-- Jenkins Pipeline as Code
-- Jenkins Shared Library using Groovy
-- Jenkins agents/nodes and label-based execution
-- Jenkins Credentials and token-based Docker authentication
-- Jenkins RBAC for access control
-- Trivy filesystem and container image security scanning
-- SonarQube static code analysis
-- SonarQube Quality Gates
-- Docker image build, versioning and registry push
-- AWS EC2 container deployment
-- Jenkins build console output analysis for troubleshooting and error diagnosis
-
-## Security
-
-Credentials are not hard-coded in the Jenkinsfile. Docker authentication and other integrations are handled through Jenkins-managed credentials/configuration.
-
-## Repository Structure
+## 🏗️ Enterprise Architecture
 
 ```text
+                                  +-------------------------------------------------------+
+                                  |                 AWS EC2 MASTER NODE                   |
+                                  |  - Jenkins Controller (Java 21)                       |
+                                  |  - Global Credentials Manager                         |
+                                  +---------------------------+---------------------------+
+                                                              |
+                                                              | SSH Remoting (agent-ssh-key)
+                                                              v
++------------------------------------------------------------------------------------------------------------------+
+|                                        AWS EC2 WORKER AGENT NODE (`build-agent`)                                 |
+|                                        (Ubuntu 24.04 LTS | OpenJDK 21 | Docker | Trivy)                            |
+|                                                                                                                  |
+|  [1. Checkout] ──► [2. OWASP SCA Scan] ──► [3. Trivy FS Scan] ──► [4. SonarQube SAST] ──► [5. Docker Build/Push] ──► [6. Trivy Image Scan] |
+|                                                    (Hard Stop)        (Quality Gate)       (withCredentials)      (Runtime Scan) |
++------------------------------------------------------------------------------------------------------------------+
+                                                                                                      |
+                                                                                                      v
+                                                                                             [ Docker Hub Registry ]
+🔥 Key Security & Architectural Features
+Distributed Master-Agent Architecture: Offloads all heavy build, compilation, and security analysis tasks from the Jenkins Controller to a dedicated SSH worker agent (build-agent), preventing Controller memory exhaustion and operational failure.
+Jenkins Shared Library Modularization: Standardizes pipeline logic across enterprise applications using reusable Groovy scripts stored in an external repository (jenkins-shared-library@release/v1.1.0).
+Automated SCA (Software Composition Analysis): Scans application dependencies using OWASP Dependency-Check to identify known CVEs in third-party libraries.
+Trivy Hard-Stop Gates: Enforces a strict pipeline break (--exit-code 1) whenever CRITICAL vulnerabilities are detected in either source files or published container images.
+SonarQube Static Analysis & Quality Gate Enforcement: Pauses pipeline execution using waitForQualityGate() to ensure code security, test coverage, and code hygiene standards are strictly met before artifact generation.
+Zero-Trust Credential Handling: Uses Jenkins secret store and Groovy withCredentials blocks to handle Docker Hub registry authentication without exposing sensitive environment tokens in build logs.
+
+🛠️ Tooling & Tech Stack
+Domain
+Technology
+Configuration Details
+Compute / Infra
+AWS EC2
+Controller Node + Dedicated Worker Agent Node (t3.medium+)
+Orchestration
+Jenkins
+Master-Agent architecture via SSH key authentication
+Shared Code
+Jenkins Shared Library
+Branch: release/v1.1.0
+SCA Security
+OWASP Dependency-Check
+Version 8.4.0 CLI
+FS & Image Security
+Aqua Security Trivy
+Version 0.71.2 (--severity HIGH,CRITICAL)
+Code Quality / SAST
+SonarQube Server & Scanner
+Governed by custom Quality Gate
+Containerization
+Docker Engine
+Version 29.1.3
+Artifact Registry
+Docker Hub
+Encrypted authentication via Jenkins Store
+📂 Repository Structure
 .
-├── Dockerfile
-├── Jenkinsfile
-├── index.html
-└── README.md
+├── Jenkinsfile                 # Main declarative pipeline script (imports Shared Library)
+├── Dockerfile                  # Application containerization definition
+├── index.html                  # Application frontend source
+└── README.md                   # Project architecture and execution documentation
+
+⚙️ Pipeline Stages Deep Dive
+@Library('my-shared-library@release/v1.1.0') _
+Checkout Code: Fetches the branch code from GitHub directly onto the worker agent node.
+OWASP Dependency-Check Scan: Evaluates project dependencies and outputs an HTML vulnerability report (dependency-check-report.html).
+Trivy Filesystem Scan: Invokes vars/trivyScan.groovy to perform a file-level security audit. Fails the build if CRITICAL flaws exist.
+SonarQube Code Analysis & Quality Gate: Invokes vars/sonarAnalysis.groovy. Sends static analysis data to SonarQube and halts execution until the Quality Gate returns status OK.
+Docker Build & Push: Invokes vars/dockerBuildPush.groovy. Builds the Docker image and pushes DOCKER_HUB_USER/devsecops-app:${BUILD_NUMBER} using stored credentials.
+Trivy Container Image Scan: Performs a final security audit on the compiled image in Docker Hub before marking the build successful.
