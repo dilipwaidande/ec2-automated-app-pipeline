@@ -1,83 +1,69 @@
-@Library('my-shared-library@main') _
+@Library('my-shared-library@release/v1.1.0') _
 
 pipeline {
-    agent any
+    agent { label 'build-agent' }
 
     environment {
-        DOCKER_HUB_REPO = 'dilipwdocker/project1-nginx'
-        APP_NAME        = 'my-running-nginx-p4-devsecops'
-        SCANNER_HOME    = tool 'sonar-scanner'
+        DOCKER_HUB_USER = 'dilipwdocker'
+        IMAGE_NAME = 'devsecops-app'
+        IMAGE_TAG = "${BUILD_NUMBER}"
+        SONAR_SERVER = 'SonarQube-Server'
     }
 
     stages {
-        stage('Code Checkout') {
+        stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/dilipwaidande/ec2-automated-app-pipeline.git'
+                checkout scm
             }
         }
 
-        stage('Trivy FileSystem Scan') {
+        stage('OWASP Dependency-Check Scan') {
             steps {
-                sh "trivy fs ."
-            }
-        }
-        
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('sonar-server') {
-                    sh "${SCANNER_HOME}/bin/sonar-scanner -Dsonar.projectName=ec2-nginx-app -Dsonar.projectKey=ec2-nginx-app"
-                }
+                echo 'Running OWASP Dependency Scan...'
+                sh 'dependency-check --project "DevSecOps App" --scan . --format "HTML" --out "dependency-check-report.html"'
             }
         }
 
-        stage('Quality Gate') {
+        stage('Trivy Filesystem Scan') {
             steps {
-                script {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-        }
-        
-        stage('Docker Build') {
-            steps {
-                script {
-                    buildDocker(env.DOCKER_HUB_REPO, env.BUILD_NUMBER)
-                }
+                // vars/trivyScan.groovy
+                // blocks only on critical CVEs
+                trivyScan('.')
             }
         }
 
-        stage('Trivy Image Scan') {
+        stage('SonarQube Code Analysis & Quality Gate') {
             steps {
-                sh "trivy image --severity HIGH,CRITICAL ${env.DOCKER_HUB_REPO}:${env.BUILD_NUMBER}"
+                // vars/sonarAnalysis.groovy
+                // sonarscanner + waits for tailored quality gate
+                sonarAnalysis(env.SONAR_SERVER)
             }
         }
 
-        stage('Docker Push') {
+        stage('Docker Build & Push') {
             steps {
-                script {
-                    pushDocker(env.DOCKER_HUB_REPO, env.BUILD_NUMBER, 'docker-hub-creds')
-                }
+                // vars/dockerbuildpush.groovy
+                buildBuildPush.groovy(env.IMAGE_NAME, env.IMAGE_TAG, env.DOCKER_HUB_USER)
             }
-        }            
+        }
 
-        stage('Container Deploy') {
+        stage('Trivy Container Image Scan') {
             steps {
-                script {
-                    deployApp(env.APP_NAME, env.DOCKER_HUB_REPO, '8000', '80')
-                }
+                // scans image for critical CVEs
+                trivyScan("${env.DOCKER_HUB_USER}/${env.IMAGE_NAME}:${env.IMAGE_TAG}")
             }
         }
     }
-
-    post {
-        always {
-            sh "docker logout || true"
+    
+    post{
+        always{
+            cleanWs()
         }
-        success {
-            echo "DevSecOps Pipeline Executed Successfully!"
+        success{
+            echo "Build #${BUILD_NUMBER} succeeded!"
         }
-        failure {
-            echo "DevSecOps Pipeline Failed!"
+        failure{
+            echo "Build #${BUILD_NUMBER} failed! Check logs"
         }
     }
 }
