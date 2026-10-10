@@ -43,7 +43,7 @@ pipeline {
         stage('Docker Build & Push') {
             steps {
                 // vars/dockerbuildpush.groovy
-                dockerBuildPush.groovy(env.IMAGE_NAME, env.IMAGE_TAG, env.DOCKER_HUB_USER)
+                dockerBuildPush(env.IMAGE_NAME, env.IMAGE_TAG, env.DOCKER_HUB_USER)
             }
         }
 
