@@ -28,6 +28,7 @@ pipeline {
             steps {
                 // vars/trivyScan.groovy
                 // blocks only on critical CVEs
+                // adding comment just to check webhook
                 trivyScan('.')
             }
         }
