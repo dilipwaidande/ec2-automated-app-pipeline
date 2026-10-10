@@ -1,63 +1,131 @@
+
 # Enterprise DevSecOps CI Pipeline with Jenkins Shared Library
 
-[![Jenkins](https://img.shields.io/badge/Jenkins-2.401+-d33833?style=flat&logo=jenkins&logoColor=white)](https://www.jenkins.io/)
-[![AWS EC2](https://img.shields.io/badge/AWS-EC2-FF9900?style=flat&logo=amazon-aws&logoColor=white)](https://aws.amazon.com/ec2/)
-[![Docker](https://img.shields.io/badge/Docker-29.1.3-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.io/)
-[![Trivy](https://img.shields.io/badge/Trivy-Vulnerability_Scanner-13a89e?style=flat&logo=aqua&logoColor=white)](https://github.com/aquasecurity/trivy)
-[![SonarQube](https://img.shields.io/badge/SonarQube-Quality_Gate-4E9BCD?style=flat&logo=sonarqube&logoColor=white)](https://www.sonarqube.org/)
+![Jenkins](https://img.shields.io/badge/Jenkins-2.401+-d33833?style=flat&logo=jenkins&logoColor=white)
+![AWS EC2](https://img.shields.io/badge/AWS-EC2-FF9900?style=flat&logo=amazon-aws&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-29.1.3-2496ED?style=flat&logo=docker&logoColor=white)
+![Trivy](https://img.shields.io/badge/Trivy-Security_Scanning-13a89e?style=flat&logo=aqua&logoColor=white)
+![SonarQube](https://img.shields.io/badge/SonarQube-Quality_Gate-4E9BCD?style=flat&logo=sonarqube&logoColor=white)
 
-This repository contains the application and pipeline definition for **Enterprise DevSecOps CI Pipeline**. It demonstrates a production-grade, distributed Continuous Integration pipeline running on AWS EC2 instances, leveraging **Jenkins Shared Libraries**, a **Master-Agent (Distributed) Architecture over SSH**, and multi-layered automated security gates.
+## Overview
 
----
+This project demonstrates a Jenkins CI pipeline built around a distributed architecture, with a Jenkins controller and a dedicated build agent running on separate AWS EC2 instances.
 
-🔥 Key Security & Architectural Features
-Distributed Master-Agent Architecture: Offloads all heavy build, compilation, and security analysis tasks from the Jenkins Controller to a dedicated SSH worker agent (build-agent), preventing Controller memory exhaustion and operational failure.
-Jenkins Shared Library Modularization: Standardizes pipeline logic across enterprise applications using reusable Groovy scripts stored in an external repository (jenkins-shared-library@release/v1.1.0).
-Automated SCA (Software Composition Analysis): Scans application dependencies using OWASP Dependency-Check to identify known CVEs in third-party libraries.
-Trivy Hard-Stop Gates: Enforces a strict pipeline break (--exit-code 1) whenever CRITICAL vulnerabilities are detected in either source files or published container images.
-SonarQube Static Analysis & Quality Gate Enforcement: Pauses pipeline execution using waitForQualityGate() to ensure code security, test coverage, and code hygiene standards are strictly met before artifact generation.
-Zero-Trust Credential Handling: Uses Jenkins secret store and Groovy withCredentials blocks to handle Docker Hub registry authentication without exposing sensitive environment tokens in build logs.
+The pipeline automates the main steps involved in building and securing a containerized application. It checks out the source code, scans dependencies and files for vulnerabilities, runs SonarQube analysis, builds a Docker image, and pushes the image to Docker Hub.
 
-🛠️ Tooling & Tech Stack
-Domain
-Technology
-Configuration Details
-Compute / Infra
-AWS EC2
-Controller Node + Dedicated Worker Agent Node (t3.medium+)
-Orchestration
-Jenkins
-Master-Agent architecture via SSH key authentication
-Shared Code
-Jenkins Shared Library
-Branch: release/v1.1.0
-SCA Security
-OWASP Dependency-Check
-Version 8.4.0 CLI
-FS & Image Security
-Aqua Security Trivy
-Version 0.71.2 (--severity HIGH,CRITICAL)
-Code Quality / SAST
-SonarQube Server & Scanner
-Governed by custom Quality Gate
-Containerization
-Docker Engine
-Version 29.1.3
-Artifact Registry
-Docker Hub
-Encrypted authentication via Jenkins Store
-📂 Repository Structure
-.
-├── Jenkinsfile                 # Main declarative pipeline script (imports Shared Library)
-├── Dockerfile                  # Application containerization definition
-├── index.html                  # Application frontend source
-└── README.md                   # Project architecture and execution documentation
+Pipeline logic is organized into a Jenkins Shared Library so that common tasks can be reused across multiple projects.
 
-⚙️ Pipeline Stages Deep Dive
+The goal is to demonstrate how security checks can be integrated into a CI pipeline and used to prevent builds with serious vulnerabilities or failing quality gates from progressing.
+
+## Architecture
+
+The setup uses two EC2 instances:
+
+- **Jenkins controller:** Manages pipeline execution, credentials, and agent connections.
+- **Build agent (`build-agent`):** Runs the build, security scans, SonarQube scanner, and Docker commands.
+
+The controller connects to the agent over SSH. Build and scanning workloads run on the agent rather than directly on the controller.
+
+```text
+                  AWS EC2
+        +--------------------------+
+        |    Jenkins Controller    |
+        |                          |
+        |  - Pipeline management   |
+        |  - Credentials           |
+        |  - Agent connection      |
+        +------------+-------------+
+                     |
+                     | SSH
+                     v
+        +--------------------------+
+        |      Build Agent         |
+        |      Ubuntu 24.04         |
+        |                          |
+        |  1. Checkout source      |
+        |  2. Dependency-Check     |
+        |  3. Trivy FS scan        |
+        |  4. SonarQube analysis   |
+        |  5. Docker build & push  |
+        |  6. Trivy image scan     |
+        +------------+-------------+
+                     |
+                     v
+        +--------------------------+
+        |       Docker Hub         |
+        |    Container Registry    |
+        +--------------------------+
+```
+
+## What the pipeline does
+
+### 1. Source checkout
+
+The pipeline checks out the application source code from GitHub onto the build agent.
+
+### 2. Dependency scanning
+
+OWASP Dependency-Check scans project dependencies for known vulnerabilities and generates an HTML report.
+
+### 3. Filesystem scanning
+
+Trivy scans the source workspace for vulnerabilities in supported files and dependencies. The pipeline is configured to fail when the scan finds CRITICAL vulnerabilities.
+
+### 4. SonarQube analysis
+
+SonarQube analyzes the application for code-quality issues and security-related findings. The pipeline waits for the configured Quality Gate result before continuing.
+
+### 5. Docker image build and push
+
+The application is packaged into a Docker image and pushed to Docker Hub. The image tag uses the Jenkins build number to distinguish between builds.
+
+### 6. Container image scanning
+
+Trivy scans the built image for vulnerabilities. A failed scan prevents the pipeline from completing successfully.
+
+## Jenkins Shared Library
+
+The pipeline imports a shared library from a separate Git repository:
+
+```groovy
 @Library('my-shared-library@release/v1.1.0') _
-Checkout Code: Fetches the branch code from GitHub directly onto the worker agent node.
-OWASP Dependency-Check Scan: Evaluates project dependencies and outputs an HTML vulnerability report (dependency-check-report.html).
-Trivy Filesystem Scan: Invokes vars/trivyScan.groovy to perform a file-level security audit. Fails the build if CRITICAL flaws exist.
-SonarQube Code Analysis & Quality Gate: Invokes vars/sonarAnalysis.groovy. Sends static analysis data to SonarQube and halts execution until the Quality Gate returns status OK.
-Docker Build & Push: Invokes vars/dockerBuildPush.groovy. Builds the Docker image and pushes DOCKER_HUB_USER/devsecops-app:${BUILD_NUMBER} using stored credentials.
-Trivy Container Image Scan: Performs a final security audit on the compiled image in Docker Hub before marking the build successful.
+```
+
+The shared library keeps common pipeline tasks separate from the main `Jenkinsfile`. This makes the pipeline easier to maintain and allows the same scanning and build logic to be reused by other applications.
+
+The library contains the following pipeline steps:
+
+| Script | Purpose |
+|---|---|
+| `vars/trivyScan.groovy` | Runs the Trivy filesystem scan |
+| `vars/sonarAnalysis.groovy` | Runs SonarQube analysis and handles the Quality Gate |
+| `vars/dockerBuildPush.groovy` | Builds the Docker image and pushes it to Docker Hub |
+
+## Tools and technologies
+
+| Component | Technology | Purpose |
+|---|---|---|
+| Infrastructure | AWS EC2 | Hosts the Jenkins controller and build agent |
+| CI/CD | Jenkins | Runs and manages the pipeline |
+| Agent connection | SSH | Connects the controller to the build agent |
+| Pipeline reuse | Jenkins Shared Library | Stores reusable pipeline logic |
+| Dependency scanning | OWASP Dependency-Check 8.4.0 | Identifies known dependency vulnerabilities |
+| Filesystem and image scanning | Trivy 0.71.2 | Checks files and container images for vulnerabilities |
+| Code analysis | SonarQube | Analyzes code quality and security findings |
+| Containerization | Docker Engine 29.1.3 | Builds the application image |
+| Registry | Docker Hub | Stores the built image |
+
+The versions listed above are the versions targeted by this project configuration, not a guarantee that every version combination is compatible with every environment.
+
+## Repository structure
+
+```text
+.
+├── Jenkinsfile
+├── Dockerfile
+├── index.html
+└── README.md
+```
+
+The `Jenkinsfile` defines the pipeline stages, while the shared library contains the reusable Groovy scripts. The `Dockerfile` defines how the application is packaged into a container, and `index.html` contains the application frontend.
+
